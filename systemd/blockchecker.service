@@ -1,0 +1,9 @@
+[Unit]
+Description=blockchecker.sh
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/blockchecker.sh ~/.blockchecker/config 4h
+
+[Install]
+WantedBy=multi-user.target

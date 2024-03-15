@@ -1,0 +1,11 @@
+sshUser=
+sshPort=
+sshIdFile=~/.ssh/id_ed25519_blockchecker
+sudoPassword="secret123"
+relayServiceName=cardano-relay@mainnet.service
+coreServiceName=cardano-core@mainnet.service
+PGHOST=
+PGPORT=
+PGUSER=
+PGDATABASE=blockchecker
+PGPASSFILE=~/.blockchecker.pgpass

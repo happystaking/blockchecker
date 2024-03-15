@@ -1,0 +1,9 @@
+[Unit]
+Description=Periodic run of blockchecker.sh
+
+[Timer]
+OnCalendar=*-*-* 0,4,8,12,16,20:03:00
+Unit=blockchecker.service
+
+[Install]
+WantedBy=timers.target
