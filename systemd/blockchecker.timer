@@ -2,7 +2,7 @@
 Description=Periodic run of blockchecker.sh
 
 [Timer]
-OnCalendar=*-*-* 0,4,8,12,16,20:03:00
+OnCalendar=*-*-* 1,5,9,13,17,21:49:00
 Unit=blockchecker.service
 
 [Install]

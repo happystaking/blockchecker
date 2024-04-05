@@ -1,0 +1,12 @@
+---
+
+relays:
+  hosts:
+    relay1:
+      ansible_host: relay1
+      ansible_ssh_port: 22
+      ansible_ssh_user: john
+    relay2:
+      ansible_host: relay2
+      ansible_ssh_port: 22
+      ansible_ssh_user: john

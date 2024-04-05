@@ -2,8 +2,10 @@
 Description=blockchecker.sh
 
 [Service]
+User=
 Type=oneshot
-ExecStart=/usr/local/bin/blockchecker.sh ~/.blockchecker/config 4h
+Environment="PGPASSFILE=/path/to/pgpass"
+ExecStart=/usr/local/bin/blockchecker.sh /path/to/.blockchecker/config 4h
 
 [Install]
 WantedBy=multi-user.target

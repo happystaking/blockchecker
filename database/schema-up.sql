@@ -7,14 +7,6 @@
 create type battle_t as enum ('slot','height');
 
 --
--- Table describing all nodes in this pool.
-create table relay (
-    id serial primary key,
-    hostname varchar(32) not null,
-    created_at timestamp not null default now()
-);
-
---
 -- Table for blocks produced by the core node.
 create table block (
     id bigserial primary key,
@@ -29,7 +21,7 @@ create table block (
 );
 
 --
--- Slot and height battles with opponent and battle result.
+-- Slot and height battles with opponent(s) and battle result.
 create table battle (
     id bigserial primary key,
     block_id bigint unique references block(id) on delete cascade on update cascade,
@@ -43,11 +35,11 @@ create table battle (
 -- A timestamp from every node of when the chain was extended.
 create table propagation (
     id bigserial primary key,
-    relay_id integer references relay(id) on delete set null on update cascade,
     block_id bigint references block(id) on delete cascade on update cascade,
+    hostname varchar(32) not null,
     extended_at timestamp,
     created_at timestamp not null default now(),
-    unique (relay_id, block_id)
+    unique (block_id, hostname)
 );
 
 --

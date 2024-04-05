@@ -1,11 +1,13 @@
-sshUser=
-sshPort=
-sshIdFile=~/.ssh/id_ed25519_blockchecker
-sudoPassword="secret123"
+# Blockchecker config
+ansibleInventoryFile=/etc/ansible/inventory.yml
+ansibleVaultId=bc_become_pass
+ansibleVaultPassFile=/home/john/.blockchecker/vtpass
 relayServiceName=cardano-relay@mainnet.service
 coreServiceName=cardano-core@mainnet.service
+
+# Postgres config
 PGHOST=
 PGPORT=
 PGUSER=
 PGDATABASE=blockchecker
-PGPASSFILE=~/.blockchecker.pgpass
+PGPASSFILE=/home/john/.blockchecker/pgpass

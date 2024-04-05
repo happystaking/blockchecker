@@ -5,17 +5,16 @@ cfg=$1
 ago=${2:-'4h'}
 
 if [ -z $cfg ]; then echo "Please pass the path to the configuation as the first argument."; exit; fi
-if [ !-r $cfg ]; then echo "Error: '$cfg' not readable."; exit; fi
+if ! [ -r $cfg ]; then echo "Error: '$cfg' not readable."; exit; fi
 
 # Script variables
 source $cfg
-sshConn="-p $sshPort -i $sshIdFile"
-pgConn="-h $PGHOST -U $PGUSER -d $PGDATABASE"
-relays=$(psql $pgConn -t --csv -c 'select * from relay;')
+pgConn="-h $PGHOST -p $PGPORT -d $PGDATABASE -U $PGUSER"
+relays=$(cat $ansibleInventoryFile | yq | jq -r '.relays.hosts[].ansible_host')
 counter=1
 
 # Function definitions
-function upsertBlock {
+function upsertBlock { # args: slot blockHeight blockHash blockForgedUTC blockAdoptedUTC poolToolMs
     epoch=$(echo "(((1591566291 + $1) / 86400) - (1506203091 / 86400) - 1) / 5" | bc)
     sql=$(echo "insert into block
             (slot, epoch, height, hash, forged_at, adopted_at, pooltool_ms)
@@ -27,25 +26,25 @@ function upsertBlock {
     echo `psql $pgConn -c "$sql" | awk '/^ / {print $1}' | tail -n 1`
 }
 
-function upsertPropagation {
+function upsertPropagation { # args: blockId relay extendedAt
     sql=$(echo "insert into propagation
-            (relay_id, block_id, extended_at)
+            (block_id, hostname, extended_at)
         values
-            ('$1', $2, '$3')
-        on conflict (relay_id, block_id) do update set
+            ($1, '$2', '$3')
+        on conflict (block_id, hostname) do update set
             extended_at='$3'
         returning id" | sed "s/' '/NULL/g")
     echo `psql $pgConn -c "$sql" | awk '/^ / {print $1}' | tail -n 1`
 }
 
-function upsertBattle {
-    if [ `echo $4 | jq -r '.competitive'` == true ]
+function upsertBattle { # args: blockId blockHeight blockHash poolToolJson
+    if [ "`echo $4 | jq -r '.competitive'`" == "true" ]
     then
         type="slot"
-        against=""
+        against=()
         isWon=$(echo $4 | jq -r '.bvrfwinner')
         mySlot=$(echo $4 | jq -r '.slot')
-        competitorJsonPaths=$(echo $4 | jq -r ".block_data[] | select(. != \"blockdata/10102/C_${3}.json\")")
+        competitorJsonPaths=$(echo $4 | jq -r ".block_data[] | select(. != \"blockdata/${2:0:5}/C_${3}.json\")")
 
         while read competitorJsonPath
         do
@@ -53,28 +52,32 @@ function upsertBattle {
             competitorJson=$(getPoolToolJson $2 $competitorBlockHash)
             if [ `echo $competitorJson | jq -r '.slot'` != $mySlot ]; then type='height'; fi
             if [ $competitorBlockHash != $3 ]; then
-                against="`echo $competitorJson | jq -r '.leaderPoolTicker'` $against"
+                against+=(`echo $competitorJson | jq -r '.leaderPoolTicker'`)
             fi
         done <<< "$competitorJsonPaths"
 
         sql=$(echo "insert into battle
                 (block_id, type, against, is_won)
             values
-                ($1, '$type', '`$against | xargs`', $isWon)
+                ($1, '$type', '`echo "${against[@]}"`', $isWon)
             on conflict (block_id) do update set
-                type='$type', against='$against', is_won='$isWon'
+                type='$type', against='`echo "${against[@]}"`', is_won='$isWon'
             returning id" | sed "s/' '/NULL/g")
         echo `psql $pgConn -c "$sql" | awk '/^ / {print $1}' | tail -n 1`
     fi
 }
 
-function getPoolToolJson {
-    echo `wget -q -O - https://s3-us-west-2.amazonaws.com/data.pooltool.io/blockdata/${1:0:5}/C_${2}.json`
+function getPoolToolJson { # args: blockHeight blockHash
+    echo "`wget -q -O - https://s3-us-west-2.amazonaws.com/data.pooltool.io/blockdata/${1:0:5}/C_${2}.json`"
+}
+
+function runAnsibleCommand { # args: relay command
+    echo "`ansible $1 -b -i $ansibleInventoryFile --vault-id $ansibleVaultId@$ansibleVaultPassFile -m ansible.builtin.command -a "$2" | tail -n +2`"
 }
 
 # Script start
 echo "Searching for forged blocks within the last ${ago}..."
-journalForgedLines=$(journalctl -o cat -u $coreServiceName -S -10m+$ago -g \"TraceForgedBlock\")
+journalForgedLines=$(runAnsibleCommand localhost "journalctl -o cat -u $coreServiceName -S -10m+$ago -g \"TraceForgedBlock\"")
 
 if [[ -z $journalForgedLines ]];
 then
@@ -86,25 +89,31 @@ else
 
     while read journalForgedLine
     do
-        printf "Checking block %d / %d\n" $counter $numBlocks
         blockHash=$(echo ${journalForgedLine} | awk '{print $10}' | cut -c 2-65)
+        printf "Checking %s (%d / %d)\n" $blockHash $counter $numBlocks
         blockHeight=$(echo ${journalForgedLine} | awk '{print $11}' | cut -c 1-11 | awk -F"E" 'BEGIN{OFMT="%10.1f"} {print $1 * (10 ^ $2)}')
         slot=$(echo ${journalForgedLine} | awk '{print $14}' | sed -E -e 's/]|\)//g' | awk -F"E" 'BEGIN{OFMT="%10.1f"} {print $1 * (10 ^ $2)}')
         blockForgedUTC=$(echo $journalForgedLine | awk '{print $2 " " $3 " " $4}' | cut -c 2-23)
-        journalAdoptedLine=$(journalctl -o cat -u $coreServiceName -S -10m+$ago -g $blockHash.*TraceAdoptedBlock)
+        journalAdoptedLine=$(runAnsibleCommand localhost "journalctl -o cat -u $coreServiceName -S -10m+$ago -g $blockHash.*TraceAdoptedBlock")
         blockAdoptedUTC=$(echo $journalAdoptedLine | awk '{print $2 " " $3 " " $4}' | cut -c 2-23)
-
         poolToolJson=$(getPoolToolJson $blockHeight $blockHash)
         poolToolMs=$(echo "$poolToolJson" | jq '.median')
-        blockId=$(upsertBlock $slot $blockHeight $blockHash "$blockForgedUTC" "$blockAdoptedUTC" $poolToolMs)
-        battleId=$(upsertBattle $blockId $blockHeight $blockHash "$poolToolJson")
 
-        while read relayLine
+        if [ "$journalAdoptedLine" != "non-zero return code" ];
+        then
+            blockId=$(upsertBlock $slot $blockHeight $blockHash "$blockForgedUTC" "$blockAdoptedUTC" $poolToolMs)
+            battleId=$(upsertBattle $blockId $blockHeight $blockHash "$poolToolJson")
+        fi
+
+        while read relay
         do
-            relayArray=($(echo $relayLine | tr "," " "))
-            journalExtendedLine=$(ssh -n $sshConn $sshUser@${relayArray[1]} "echo $sudoPassword | sudo -S journalctl -o cat -u $relayServiceName -S -10m+$ago -g extended.*$blockHash")
-            chainExtendedUTC=$(echo $journalExtendedLine | head -n 1 | awk '{print $2 " " $3 " " $4}' | cut -c 2-23)
-            propagId=$(upsertPropagation ${relayArray[0]} $blockId "$chainExtendedUTC")
+            journalExtendedLine=$(runAnsibleCommand $relay "journalctl -o cat -u $relayServiceName -S -10m+$ago -g extended.*$blockHash")
+
+            if [ "$journalExtendedLine" != "non-zero return code" ];
+            then
+                chainExtendedUTC=$(echo $journalExtendedLine | head -n 1 | awk '{print $2 " " $3 " " $4}' | cut -c 2-23)
+                propagId=$(upsertPropagation $blockId $relay "$chainExtendedUTC")
+            fi
         done <<< "$relays"
 
         counter=$((counter+1))
