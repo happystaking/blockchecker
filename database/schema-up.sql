@@ -26,7 +26,7 @@ create table battle (
     id bigserial primary key,
     block_id bigint unique references block(id) on delete cascade on update cascade,
     type battle_t not null,
-    against varchar(64) not null,
+    against varchar(32) not null,
     is_won boolean not null,
     created_at timestamp not null default now()
 );
@@ -43,11 +43,12 @@ create table propagation (
 );
 
 --
--- Storing the leaderlog allows for reporting of missed blocks.
+-- Storing the leaderlog allows missed slots to be reported.
 create table leaderlog (
     id bigserial primary key,
     nr smallint not null,
     slot bigint not null,
     epoch smallint not null,
+    scheduled_at timestamp with time zone not null,
     created_at timestamp not null default now()
 );

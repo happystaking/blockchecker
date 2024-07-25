@@ -16,12 +16,13 @@ counter=1
 # Function definitions
 function upsertBlock { # args: slot blockHeight blockHash blockForgedUTC blockAdoptedUTC poolToolMs
     epoch=$(echo "(((1591566291 + $1) / 86400) - (1506203091 / 86400) - 1) / 5" | bc)
+    if [ "x$6" == "x" ]; then ms=NULL; else ms=$6; fi
     sql=$(echo "insert into block
             (slot, epoch, height, hash, forged_at, adopted_at, pooltool_ms)
         values
-            ($1, $epoch, $2, '$3', '$4', '$5', $6)
+            ($1, $epoch, $2, '$3', '$4', '$5', $ms)
         on conflict (slot) do update set
-            height=$2, hash='$3', forged_at='$4', adopted_at='$5', pooltool_ms='$6'
+            height=$2, hash='$3', forged_at='$4', adopted_at='$5', pooltool_ms='$ms'
         returning id" | sed "s/' '/NULL/g")
     echo `psql $pgConn -c "$sql" | awk '/^ / {print $1}' | tail -n 1`
 }
@@ -77,7 +78,7 @@ function runAnsibleCommand { # args: relay command
 
 # Script start
 echo "Searching for forged blocks within the last ${ago}..."
-journalForgedLines=$(runAnsibleCommand localhost "journalctl -o cat -u $coreServiceName -S -10m+$ago -g \"TraceForgedBlock\"")
+journalForgedLines=$(journalctl -o cat -u $coreServiceName -S -10m+$ago -g "TraceForgedBlock")
 
 if [[ -z $journalForgedLines ]];
 then
@@ -94,7 +95,7 @@ else
         blockHeight=$(echo ${journalForgedLine} | awk '{print $11}' | cut -c 1-11 | awk -F"E" 'BEGIN{OFMT="%10.1f"} {print $1 * (10 ^ $2)}')
         slot=$(echo ${journalForgedLine} | awk '{print $14}' | sed -E -e 's/]|\)//g' | awk -F"E" 'BEGIN{OFMT="%10.1f"} {print $1 * (10 ^ $2)}')
         blockForgedUTC=$(echo $journalForgedLine | awk '{print $2 " " $3 " " $4}' | cut -c 2-23)
-        journalAdoptedLine=$(runAnsibleCommand localhost "journalctl -o cat -u $coreServiceName -S -10m+$ago -g $blockHash.*TraceAdoptedBlock")
+        journalAdoptedLine=$(journalctl -o cat -u $coreServiceName -S -10m+$ago -g $blockHash.*TraceAdoptedBlock)
         blockAdoptedUTC=$(echo $journalAdoptedLine | awk '{print $2 " " $3 " " $4}' | cut -c 2-23)
         poolToolJson=$(getPoolToolJson $blockHeight $blockHash)
         poolToolMs=$(echo "$poolToolJson" | jq '.median')

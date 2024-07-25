@@ -2,7 +2,6 @@
 Description=blockchecker.sh
 
 [Service]
-User=
 Type=oneshot
 Environment="PGPASSFILE=/path/to/pgpass"
 ExecStart=/usr/local/bin/blockchecker.sh /path/to/.blockchecker/config 4h

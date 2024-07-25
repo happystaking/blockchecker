@@ -35,7 +35,7 @@ psql -d blockchecker < database/schema-up.sql
 ```
 
 ### Step 4
-Open `systemd/blockchecker.service`, set the `User=`, set the path to your `pgpass` in `Environment=` and edit the `ExecStart=` line to point the script to the location of your `.blockchecker/config` file. Optionally you may edit the search interval (default 4 hours), but then you'll also have to edit the `systemd.timer` file to match the interval.
+Open `systemd/blockchecker.service`, set the path to your `pgpass` in `Environment=` and edit the `ExecStart=` line to point the script to the location of your `.blockchecker/config` file. Optionally you may edit the search interval (default 4 hours), but then you'll also have to edit the `systemd.timer` file to match the interval.
 
 Finally, set up the script for use with systemd from the `~/blockchecker` directory:
 ```
