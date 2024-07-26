@@ -15,7 +15,7 @@ counter=1
 
 # Function definitions
 function upsertBlock { # args: slot blockHeight blockHash blockForgedUTC blockAdoptedUTC poolToolMs
-    epoch=$(echo "(((1591566291 + $1) / 86400) - (1506203091 / 86400) - 1) / 5" | bc)
+    epoch=$(echo "(((85363200 + $1) / 86400) / 5)" | bc)
     if [ "x$6" == "x" ]; then ms=NULL; else ms=$6; fi
     sql=$(echo "insert into block
             (slot, epoch, height, hash, forged_at, adopted_at, pooltool_ms)
