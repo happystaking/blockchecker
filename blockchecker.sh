@@ -22,7 +22,7 @@ function upsertBlock { # args: slot blockHeight blockHash blockForgedUTC blockAd
         values
             ($1, $epoch, $2, '$3', '$4', '$5', $ms)
         on conflict (slot) do update set
-            height=$2, hash='$3', forged_at='$4', adopted_at='$5', pooltool_ms='$ms'
+            height=$2, hash='$3', forged_at='$4', adopted_at='$5', pooltool_ms=$6
         returning id" | sed "s/' '/NULL/g")
     echo `psql $pgConn -c "$sql" | awk '/^ / {print $1}' | tail -n 1`
 }
