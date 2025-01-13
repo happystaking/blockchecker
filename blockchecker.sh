@@ -38,8 +38,9 @@ function upsertPropagation { # args: blockId relay extendedAt
     echo `psql $pgConn -c "$sql" | awk '/^ / {print $1}' | tail -n 1`
 }
 
-function upsertBattle { # args: blockId blockHeight blockHash poolToolJson
-    if [ "`echo $4 | jq -r '.competitive'`" == "true" ]
+function upsertBattle { # args: blockId blockHeight blockHash poolToolJson slot
+    if [ -z "$4" ]; then json="{\"competitive\": true, \"bvrfwinner\": false, \"slot\": $5}"; else json=$4; fi
+    if [ "`echo $json | jq -r '.competitive'`" == "true" ]
     then
         type="slot"
         against=()
@@ -47,15 +48,20 @@ function upsertBattle { # args: blockId blockHeight blockHash poolToolJson
         mySlot=$(echo $4 | jq -r '.slot')
         competitorJsonPaths=$(echo $4 | jq -r ".block_data[] | select(. != \"blockdata/${2:0:5}/C_${3}.json\")")
 
-        while read competitorJsonPath
-        do
-            competitorBlockHash=$(echo $competitorJsonPath | cut -c 19-82)
-            competitorJson=$(getPoolToolJson $2 $competitorBlockHash)
-            if [ `echo $competitorJson | jq -r '.slot'` != $mySlot ]; then type='height'; fi
-            if [ $competitorBlockHash != $3 ]; then
-                against+=(`echo $competitorJson | jq -r '.leaderPoolTicker'`)
-            fi
-        done <<< "$competitorJsonPaths"
+        if [ -n "$competitorJsonPaths" ]
+        then
+            while read competitorJsonPath
+            do
+                competitorBlockHash=$(echo $competitorJsonPath | cut -c 19-82)
+                competitorJson=$(getPoolToolJson $2 $competitorBlockHash)
+                if [ `echo $competitorJson | jq -r '.slot'` != $mySlot ]; then type='height'; fi
+                if [ $competitorBlockHash != $3 ]; then
+                    against+=(`echo $competitorJson | jq -r '.leaderPoolTicker'`)
+                fi
+            done <<< "$competitorJsonPaths"
+        else
+            against+="###"
+        fi
 
         sql=$(echo "insert into battle
                 (block_id, type, against, is_won)
@@ -64,7 +70,27 @@ function upsertBattle { # args: blockId blockHeight blockHash poolToolJson
             on conflict (block_id) do update set
                 type='$type', against='`echo "${against[@]}"`', is_won='$isWon'
             returning id" | sed "s/' '/NULL/g")
-        echo `psql $pgConn -c "$sql" | awk '/^ / {print $1}' | tail -n 1`
+        sqlResult=$(psql $pgConn -c "$sql" | awk '/^ / {print $1}' | tail -n 1)
+        notifyBattle $1 $2 $3 $5 $type $against $isWon
+        echo $sqlResult
+    fi
+}
+
+function notifyBattle { # args: blockId blockHeight blockHash slot type against isWon
+    if [ -n "$notifyEmailAddress" ]
+    then
+        if [ "$7" == "true" ]; then result="won"; else result="lost"; fi
+        if [ "$notifySlotBattle" == "$result" ] ||
+           [ "$notifySlotBattle" == "both" ] ||
+           [ "$notifyHeightBattle" == "$result" ] ||
+           [ "$notifyHeightBattle" == "both" ]
+        then
+            echo "${5^} battle for height $2 was $result. Sending notification."
+            printf "Type:    %s\nAgainst: %s\nResult:  %s\n\nID:      %s\nHeight:  %s\nHash:    %s\nSlot:    %d" $5 $6 ${result^} $1 $2 $3 $4 | \
+            mail -s "${result^} $5 battle against $6" $notifyEmailAddress
+        else
+            echo " ${4^} battle for $3 was $result. Not sending notification."
+        fi
     fi
 }
 
@@ -72,11 +98,30 @@ function getPoolToolJson { # args: blockHeight blockHash
     echo "`wget -q -O - https://s3-us-west-2.amazonaws.com/data.pooltool.io/blockdata/${1:0:5}/C_${2}.json`"
 }
 
-function runAnsibleCommand { # args: relay command
+function runAnsibleCommand { # args: hostname command
     echo "`ansible $1 -b -i $ansibleInventoryFile --vault-id $ansibleVaultId@$ansibleVaultPassFile -m ansible.builtin.command -a "$2" | tail -n +2`"
 }
 
+function runAnsiblePing { # args: hostname
+    echo "`ansible $1 -b -i $ansibleInventoryFile --vault-id $ansibleVaultId@$ansibleVaultPassFile -m ansible.builtin.ping`"
+}
+
+function testScript
+{
+    sqlResult=$(psql $pgConn -c "select version()")
+    echo "$sqlResult"
+    echo ""
+
+    while read relay
+    do
+        pingResult=$(runAnsiblePing $relay)
+        echo "$pingResult"
+    done <<< "$relays"
+    exit;
+}
+
 # Script start
+if [ "$ago" == "test" ]; then testScript; exit; fi
 echo "Searching for forged blocks within the last ${ago}..."
 journalForgedLines=$(journalctl -o cat -u $coreServiceName -S -10m+$ago -g "TraceForgedBlock")
 
@@ -103,7 +148,7 @@ else
         if [ "$journalAdoptedLine" != "non-zero return code" ];
         then
             blockId=$(upsertBlock $slot $blockHeight $blockHash "$blockForgedUTC" "$blockAdoptedUTC" $poolToolMs)
-            battleId=$(upsertBattle $blockId $blockHeight $blockHash "$poolToolJson")
+            battleId=$(upsertBattle $blockId $blockHeight $blockHash "$poolToolJson" $slot)
         fi
 
         while read relay

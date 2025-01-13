@@ -4,6 +4,9 @@ ansibleVaultId=bc_become_pass
 ansibleVaultPassFile=/home/john/.blockchecker/vtpass
 relayServiceName=cardano-relay@mainnet.service
 coreServiceName=cardano-core@mainnet.service
+notifyEmailAddress=
+notifySlotBattle=
+notifyHeightBattle=
 
 # Postgres config
 PGHOST=
