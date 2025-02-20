@@ -22,7 +22,7 @@ function upsertBlock { # args: slot blockHeight blockHash blockForgedUTC blockAd
         values
             ($1, $epoch, $2, '$3', '$4', '$5', $ms)
         on conflict (slot) do update set
-            height=$2, hash='$3', forged_at='$4', adopted_at='$5', pooltool_ms=$6
+            height=$2, hash='$3', forged_at='$4', adopted_at='$5', pooltool_ms=$ms
         returning id" | sed "s/' '/NULL/g")
     echo `psql $pgConn -c "$sql" | awk '/^ / {print $1}' | tail -n 1`
 }
@@ -44,9 +44,13 @@ function upsertBattle { # args: blockId blockHeight blockHash poolToolJson slot
     then
         type="slot"
         against=()
-        isWon=$(echo $4 | jq -r '.bvrfwinner')
-        mySlot=$(echo $4 | jq -r '.slot')
-        competitorJsonPaths=$(echo $4 | jq -r ".block_data[] | select(. != \"blockdata/${2:0:5}/C_${3}.json\")")
+        isWon=$(echo $json | jq -r '.bvrfwinner')
+        mySlot=$(echo $json | jq -r '.slot')
+
+        if [[ -n "$4" ]];
+        then
+            competitorJsonPaths=$(echo $json | jq -r ".block_data[] | select(. != \"blockdata/${2:0:5}/C_${3}.json\")");
+        fi
 
         if [ -n "$competitorJsonPaths" ]
         then
