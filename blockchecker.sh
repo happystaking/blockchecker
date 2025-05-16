@@ -139,13 +139,25 @@ else
 
     while read journalForgedLine
     do
-        blockHash=$(echo ${journalForgedLine} | awk '{print $10}' | cut -c 2-65)
-        printf "Checking %s (%d / %d)\n" $blockHash $counter $numBlocks
-        blockHeight=$(echo ${journalForgedLine} | awk '{print $11}' | cut -c 1-11 | awk -F"E" 'BEGIN{OFMT="%10.1f"} {print $1 * (10 ^ $2)}')
-        slot=$(echo ${journalForgedLine} | awk '{print $14}' | sed -E -e 's/]|\)//g' | awk -F"E" 'BEGIN{OFMT="%10.1f"} {print $1 * (10 ^ $2)}')
-        blockForgedUTC=$(echo $journalForgedLine | awk '{print $2 " " $3 " " $4}' | cut -c 2-23)
-        journalAdoptedLine=$(journalctl -o cat -u $coreServiceName -S -10m+$ago -g $blockHash.*TraceAdoptedBlock)
-        blockAdoptedUTC=$(echo $journalAdoptedLine | awk '{print $2 " " $3 " " $4}' | cut -c 2-23)
+        if [ "$useJsonLogFormat" == "true" ];
+        then
+            blockHash=$(echo ${journalForgedLine} |  jq -r .data.block)
+            printf "Checking %s (%d / %d)\n" $blockHash $counter $numBlocks
+            blockHeight=$(echo ${journalForgedLine} |  jq -r .data.blockNo)
+            slot=$(echo ${journalForgedLine} |  jq -r .data.slot)
+            blockForgedUTC=$(echo $journalForgedLine | jq -r .at | sed -e 's/T/ /g' -e 's/Z/+00/g')
+            journalAdoptedLine=$(journalctl -o cat -u $coreServiceName -S -10m+$ago -g $blockHash.*TraceAdoptedBlock)
+            blockAdoptedUTC=$(echo $journalAdoptedLine | jq -r .at | sed -e 's/T/ /g' -e 's/Z/+00/g')
+        else
+            blockHash=$(echo ${journalForgedLine} | awk '{print $10}' | cut -c 2-65)
+            printf "Checking %s (%d / %d)\n" $blockHash $counter $numBlocks
+            blockHeight=$(echo ${journalForgedLine} | awk '{print $11}' | cut -c 1-11 | awk -F"E" 'BEGIN{OFMT="%10.1f"} {print $1 * (10 ^ $2)}')
+            slot=$(echo ${journalForgedLine} | awk '{print $14}' | sed -E -e 's/]|\)//g' | awk -F"E" 'BEGIN{OFMT="%10.1f"} {print $1 * (10 ^ $2)}')
+            blockForgedUTC=$(echo $journalForgedLine | awk '{print $2 " " $3 " " $4}' | cut -c 2-23)
+            journalAdoptedLine=$(journalctl -o cat -u $coreServiceName -S -10m+$ago -g $blockHash.*TraceAdoptedBlock)
+            blockAdoptedUTC=$(echo $journalAdoptedLine | awk '{print $2 " " $3 " " $4}' | cut -c 2-23)
+        fi
+
         poolToolJson=$(getPoolToolJson $blockHeight $blockHash)
         poolToolMs=$(echo "$poolToolJson" | jq '.median')
 
@@ -157,11 +169,18 @@ else
 
         while read relay
         do
-            journalExtendedLine=$(runAnsibleCommand $relay "journalctl -o cat -u $relayServiceName -S -10m+$ago -g extended.*$blockHash")
+            if [ "$useJsonLogFormat" == "true" ]; then identifier="AddedToCurrentChain"; else identifier="extended"; fi
+            journalExtendedLine=$(runAnsibleCommand $relay "journalctl -o cat -u $relayServiceName -S -10m+$ago -g ${identifier}.*$blockHash")
 
             if [ "$journalExtendedLine" != "non-zero return code" ];
             then
-                chainExtendedUTC=$(echo $journalExtendedLine | head -n 1 | awk '{print $2 " " $3 " " $4}' | cut -c 2-23)
+                if [ "$useJsonLogFormat" == "true" ];
+                then
+                    chainExtendedUTC=$(echo $journalExtendedLine | jq -r .at | sed -e 's/T/ /g' -e 's/Z/+00/g')
+                else
+                    chainExtendedUTC=$(echo $journalExtendedLine | head -n 1 | awk '{print $2 " " $3 " " $4}' | cut -c 2-23)
+                fi
+
                 propagId=$(upsertPropagation $blockId $relay "$chainExtendedUTC")
             fi
         done <<< "$relays"
