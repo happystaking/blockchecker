@@ -60,11 +60,13 @@ function upsertBattle { # args: blockId blockHeight blockHash poolToolJson slot
                 competitorJson=$(getPoolToolJson $2 $competitorBlockHash)
                 if [ `echo $competitorJson | jq -r '.slot'` != $mySlot ]; then type='height'; fi
                 if [ $competitorBlockHash != $3 ]; then
-                    against+=(`echo $competitorJson | jq -r '.leaderPoolTicker'`)
+                    ticker=$(echo $competitorJson | jq -r '.leaderPoolTicker')
+                    [[ -z "$ticker" ]] && ticker="[anonymous]"
+                    against+=($ticker)
                 fi
             done <<< "$competitorJsonPaths"
         else
-            against+="###"
+            against+=("[unknown]")
         fi
 
         sql=$(echo "insert into battle
@@ -75,23 +77,23 @@ function upsertBattle { # args: blockId blockHeight blockHash poolToolJson slot
                 type='$type', against='`echo "${against[@]}"`', is_won='$isWon'
             returning id" | sed "s/' '/NULL/g")
         sqlResult=$(psql $pgConn -c "$sql" | awk '/^ / {print $1}' | tail -n 1)
-        notifyBattle $1 $2 $3 $5 $type $against $isWon
+        notifyBattle $1 $2 $3 $5 $type $isWon $against
         echo $sqlResult
     fi
 }
 
-function notifyBattle { # args: blockId blockHeight blockHash slot type against isWon
+function notifyBattle { # args: blockId blockHeight blockHash slot type isWon against
     if [ -n "$notifyEmailAddress" ]
     then
-        if [ "$7" == "true" ]; then result="won"; else result="lost"; fi
+        if [ "$6" == "true" ]; then result="won"; else result="lost"; fi
         if [ "$notifySlotBattle" == "$result" ] ||
            [ "$notifySlotBattle" == "both" ] ||
            [ "$notifyHeightBattle" == "$result" ] ||
            [ "$notifyHeightBattle" == "both" ]
         then
-            echo "${5^} battle for height $2 was $result. Sending notification."
+            echo "${5^} battle for block height $2 was $result. Sending notification."
             printf "ID:      %s\nHeight:  %s\nHash:    %s\nSlot:    %d\n\nhttps://pooltool.io/realtime/%s" $1 $2 $3 $4 $2 | \
-            mail -s "${result^} $5 battle against ${6[*]:-[anonymous]}" $notifyEmailAddress
+            mail -s "${result^} $5 battle against ${7:-[anonymous]}" $notifyEmailAddress
         else
             echo " ${4^} battle for $3 was $result. Not sending notification."
         fi
