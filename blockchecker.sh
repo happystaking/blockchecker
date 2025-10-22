@@ -174,7 +174,7 @@ else
             if [ "$useJsonLogFormat" == "true" ]; then identifier="AddedToCurrentChain"; else identifier="extended"; fi
             journalExtendedLine=$(runAnsibleCommand $relay "journalctl -o cat -u $relayServiceName -S -10m+$ago -g ${identifier}.*$blockHash")
 
-            if [ "$journalExtendedLine" != "non-zero return code" ];
+            if [[ "$journalExtendedLine" != *"non-zero return code"* ]];
             then
                 if [ "$useJsonLogFormat" == "true" ];
                 then
