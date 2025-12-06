@@ -16,24 +16,26 @@ counter=1
 # Function definitions
 function upsertBlock { # args: slot blockHeight blockHash blockForgedUTC blockAdoptedUTC poolToolMs
     epoch=$(echo "(((85363200 + $1) / 86400) / 5)" | bc)
+    if [ "x$5" == "x" ]; then forged=NULL; else forged="'$5'"; fi
     if [ "x$6" == "x" ]; then ms=NULL; else ms=$6; fi
     sql=$(echo "insert into block
             (slot, epoch, height, hash, forged_at, adopted_at, pooltool_ms)
         values
-            ($1, $epoch, $2, '$3', '$4', '$5', $ms)
+            ($1, $epoch, $2, '$3', '$4', $forged, $ms)
         on conflict (slot) do update set
-            height=$2, hash='$3', forged_at='$4', adopted_at='$5', pooltool_ms=$ms
+            height=$2, hash='$3', forged_at='$4', adopted_at=$forged, pooltool_ms=$ms
         returning id" | sed "s/' '/NULL/g")
     echo `psql $pgConn -c "$sql" | awk '/^ / {print $1}' | tail -n 1`
 }
 
 function upsertPropagation { # args: blockId relay extendedAt
+    if [ "x$3" == "x" ]; then ext="' '"; else ext="'$3'"; fi
     sql=$(echo "insert into propagation
             (block_id, hostname, extended_at)
         values
-            ($1, '$2', '$3')
+            ($1, '$2', $ext)
         on conflict (block_id, hostname) do update set
-            extended_at='$3'
+            extended_at=$ext
         returning id" | sed "s/' '/NULL/g")
     echo `psql $pgConn -c "$sql" | awk '/^ / {print $1}' | tail -n 1`
 }
@@ -165,8 +167,8 @@ else
 
         if [ "$journalAdoptedLine" != "non-zero return code" ];
         then
-            blockId=$(upsertBlock $slot $blockHeight $blockHash "$blockForgedUTC" "$blockAdoptedUTC" $poolToolMs)
-            battleId=$(upsertBattle $blockId $blockHeight $blockHash "$poolToolJson" $slot)
+            blockId=$(upsertBlock "$slot" "$blockHeight" "$blockHash" "$blockForgedUTC" "$blockAdoptedUTC" "$poolToolMs")
+            battleId=$(upsertBattle "$blockId" "$blockHeight" "$blockHash" "$poolToolJson" "$slot")
         fi
 
         while read relay
