@@ -62,8 +62,10 @@ function upsertBattle { # args: blockId blockHeight blockHash poolToolJson slot
                 competitorJson=$(getPoolToolJson $2 $competitorBlockHash)
                 if [ `echo $competitorJson | jq -r '.slot'` != $mySlot ]; then type='height'; fi
                 if [ $competitorBlockHash != $3 ]; then
+                    hex=$(echo $competitorJson | jq -r '.leaderPoolId')
                     ticker=$(echo $competitorJson | jq -r '.leaderPoolTicker')
-                    [[ -z "$ticker" ]] && ticker="[anonymous]"
+                    [[ -z "$ticker" && -n "$binBech32" ]] && ticker="$($binBech32 pool <<< $hex | tail -c5)"
+                    [[ -z "$ticker" ]] && ticker="[nometa]"
                     against+=($ticker)
                 fi
             done <<< "$competitorJsonPaths"

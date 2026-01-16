@@ -47,7 +47,7 @@ create table propagation (
 create table leaderlog (
     id bigserial primary key,
     nr smallint not null,
-    slot bigint not null,
+    slot bigint default null,
     epoch smallint not null,
     scheduled_at timestamp with time zone not null,
     created_at timestamp not null default now()

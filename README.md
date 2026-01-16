@@ -48,6 +48,9 @@ psql -d blockchecker < database/schema-up.sql
 ### Step 4
 Open `systemd/blockchecker.service`, set the path to your `pgpass` in `Environment=` and edit the `ExecStart=` line to point the script to the location of your `.blockchecker/config` file. Optionally you may edit the search interval (default 4 hours), but then you'll also have to edit the `systemd.timer` file to match the interval.
 
+### Optional bech32
+When there is a slot or height battle and the competing pool does not have any metadata, the pool is stored with ticker `[nometa]`. If you instead want to store the last five characters of the pool bech32, you need the `bech32` utility to convert the `leaderPoolid` hex to bech32. You can get it from [GitHub](https://github.com/IntersectMBO/bech32). After installing that, point `binBech32` in `.blockchecker/config` to that binary.
+
 ## Testing
 Run the following command to test connectivity to your relay nodes and the database:
 ```

@@ -8,6 +8,7 @@ notifyEmailAddress=
 notifySlotBattle=
 notifyHeightBattle=
 useJsonLogFormat=
+binBech32=
 
 # Postgres config
 PGHOST=
