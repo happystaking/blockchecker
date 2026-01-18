@@ -96,7 +96,7 @@ function notifyBattle { # args: blockId blockHeight blockHash slot type isWon ag
            [ "$notifyHeightBattle" == "both" ]
         then
             echo "${5^} battle for block height $2 was $result. Sending notification."
-            printf "ID:      %s\nHeight:  %s\nHash:    %s\nSlot:    %d\n\nhttps://pooltool.io/realtime/%s" $1 $2 $3 $4 $2 | \
+            printf "ID:      %s\nHeight:  %s\nSlot:    %d\nHash:    %s\n\nhttps://pooltool.io/realtime/%s" $1 $2 $4 $3 $2 | \
             mail -s "${result^} $5 battle against ${7:-[anonymous]}" $notifyEmailAddress
         else
             echo " ${4^} battle for $3 was $result. Not sending notification."
