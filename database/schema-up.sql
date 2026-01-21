@@ -46,9 +46,9 @@ create table propagation (
 -- Storing the leaderlog allows missed slots to be reported.
 create table leaderlog (
     id bigserial primary key,
-    nr smallint not null,
-    slot bigint default null,
     epoch smallint not null,
-    scheduled_at timestamp with time zone not null,
+    nr smallint not null,
+    slot bigint unique default null,
+    scheduled_at timestamp with time zone default null,
     created_at timestamp not null default now()
 );
