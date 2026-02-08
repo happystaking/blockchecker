@@ -64,7 +64,7 @@ function upsertBattle { # args: blockId blockHeight blockHash poolToolJson slot
                 if [ $competitorBlockHash != $3 ]; then
                     hex=$(echo $competitorJson | jq -r '.leaderPoolId')
                     ticker=$(echo $competitorJson | jq -r '.leaderPoolTicker')
-                    [[ -z "$ticker" && -n "$binBech32" ]] && ticker="$($binBech32 pool <<< $hex | tail -c5)"
+                    [[ -z "$ticker" && -n "$binBech32" ]] && ticker="$($binBech32 pool <<< $hex | head -c -1 | tail -c5)"
                     [[ -z "$ticker" ]] && ticker="[nometa]"
                     against+=($ticker)
                 fi
