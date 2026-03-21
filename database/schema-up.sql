@@ -16,7 +16,7 @@ create table block (
     hash varchar(64) not null,
     forged_at timestamp,
     adopted_at timestamp,
-    pooltool_ms decimal(6,2),
+    pooltool_ms decimal(8,2),
     created_at timestamp not null default now()
 );
 
