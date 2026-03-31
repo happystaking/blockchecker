@@ -50,5 +50,6 @@ create table leaderlog (
     nr smallint not null,
     slot bigint unique default null,
     scheduled_at timestamp with time zone default null,
-    created_at timestamp not null default now()
+    created_at timestamp not null default now(),
+    unique (epoch, nr)
 );
